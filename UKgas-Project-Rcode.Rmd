@@ -1,0 +1,142 @@
+---
+title: "MTH6139 Time Series"
+subtitle: "Coursework 1"
+author: "200944805"
+name: "Mohammed Ismail Kamali"
+date: "March 2024"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+Firstly, we are loading the 2 libraries we require.
+
+'prophet': Meta's forecasting system
+
+'zoo': used to convert time series to a vector of dates
+
+```{r, echo=FALSE, warning=FALSE}
+htmltools::img(src = knitr::image_uri("QMlogo.png"), 
+               alt = 'logo', 
+               style = 'position:absolute; top:0; right:0; padding:10px; width:30%;')
+
+library(prophet) #loading the libraries
+library(zoo) 
+```
+
+Next, we will investigate the data set we are trying to analyse. I have
+chosen the data set 'UKgas' as I believe we can analyse how the demand
+for gas is ever rising. I believe that analysing this data set can give
+an insight on approximately how much gas is being used and how we should
+be moving towards a more sustainable, less polluting way of keeping
+households warm.
+
+```{r}
+UKgas
+```
+
+We can see that this data set gives us the quarterly gas consumption
+from the year 1960 to 1986. A drawback of modelling this may be that the
+gas consumption from this time period is not indicative on present time
+gas consumption as technology and heating has advanced. However, this
+will still give us an insight on the general trend and seasonality of
+gas consumption.
+
+```{r}
+plot(UKgas)
+```
+
+We can see that this time series has multiple layers of variables.
+Notably, an upwards trend, what seems to be a monthly seasonal effect
+and also some noise. Let us first take a closer look at the trend of the
+time series and estimate the trend using a linear model.
+
+```{r}
+t<-as.yearqtr(time(UKgas)) #Firstly we are assigning a variable t which stores a vector of the time series' time intervals. We use the library zoo to break down the time values into quarterly data
+x<-UKgas #Now we are assigning our time series data to the variable x
+plot(x) #We will plot our time series to give an indication if we have found a correct trend
+model<-lm(x~t) #We use a linear model to find the trend function
+lines(t,fitted(model),type="l",col="red") #Finally we are using values of the linear model to indicate a red trend line
+```
+
+We can conclude from this that the there is a general trend upwards but
+this is pretty obvious at first glance. However, this indicates to use
+that the gas consumption in the UK is generally an upwards moving
+function which shows that the demand for gas is ever-growing. An
+explanation for this may be tied into the population growth in the UK.
+Now, we can see that there seems to be some type of seasonal component
+which are the spikes upwards and downwards so we will try to investigate
+this further.
+
+```{r}
+seasonality <- decompose(UKgas)$seasonal #We create a variable named seasonality which stores the seasonal data of the decompose function
+plot(seasonality) #Now we plot it for analysis
+```
+
+The plot of the seasonality doesn't seem to indicate a pattern. This may
+be because more complicated factors such as irregular weather
+conditions, economic state of consumers or other factors are playing a
+part in gas consumption in the UK. Next we will use the randomness
+component from our decompose function. This will indicate if we have any
+heteroskedasticity present in our residual error. Heteroskedasticity is
+where variability changes with time. We will not accept this to analyse
+our residual error so if this is present it will need to be removed.
+
+```{r}
+heterosked<-decompose(UKgas)$random #We are storing the random element from the decompose function
+plot(heterosked) #We will now plot this random element
+```
+
+The plot of this random element seems to indicate the data is
+heteroskedastic. In terms of our gas consumption context, it shows that
+the variability of gas consumption in the UK changes throughout time. In
+a modelling context, this heteroskedasticity must be removed to analyse
+the residual error. We can do this using Box-Cox transformations.
+
+```{r}
+lambda<-forecast::BoxCox.lambda(x) #We are finding the optimal lambda value for the Box-Cox transformation
+x_new<-forecast::BoxCox(x,lambda) #Now we are storing the transformed data as x_new
+plot(decompose(x_new)$random) #Here we plot the random component of the transformed data
+```
+
+Now, we can see that the variability of the still changes throughout
+time so let us try to instead do a log transformation.
+
+```{r}
+log_x=log(x)
+plot(decompose(log_x)$random)
+```
+
+Even still our data remains heteroskedastic so perhaps we should use a
+different method for forecasting. We can use Meta's prophet tool to
+create a predictive model for UK gas consumption.
+
+```{r}
+gas.df = data.frame(ds=t,y=x) #Here, we are creating a gas data frame which is a matrix where the 1st column is our quarterly time values and the 2nd column is the gas consumption. This is needed for the prophet command
+model1 = prophet(gas.df) #We create a model using the prophet modelling function
+future_times = make_future_dataframe(model1, periods=100, freq="quarter") #We now use this line of code to create future quarterly dates for our forecasting plot. The value 100 indicates that we will look 100 quarters into the future from our initial time series
+prediction_values = predict(model1, future_times) #We use this line of code to obtain the predicted values from our prophet model
+plot(model1,prediction_values,xlabel = "Dates", ylabel = "UK Gas Consumption") #Here we are producing our forecasting plot
+```
+
+This plot now indicates the predicted time series for UK Gas consumption
+which can be used for forecasting. The black points indicate our initial
+time series values and the blue line is our prediction. Meta's Prophet
+tool works by creating an additive model which takes into account the
+trend, seasonality and residual error. However, such predictions may not
+be true for dates that is so far away so it would be better to reduce
+the time period for our forecasting model.
+
+```{r}
+model2 = prophet(gas.df)
+future_times2 = make_future_dataframe(model2, periods=30, freq="quarter")
+prediction_values2 = predict(model2, future_times2)
+plot(model2,prediction_values2,xlabel = "Dates", ylabel = "UK Gas Consumption")
+```
+
+This is perhaps a more accurate model since the time frame for
+predictions is much shorter.
